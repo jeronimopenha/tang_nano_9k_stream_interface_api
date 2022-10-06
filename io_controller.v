@@ -10,11 +10,19 @@ module io_protocol_controller
   output reg start
 );
 
+  // Interface info to send, n_channel
+  localparam [8-1:0] INFO_TO_SEND = 8'd1;
+
   // Instantiate the RX controller
   wire rx_bsy;
   wire rx_block_timeout;
   wire rx_data_valid;
   wire [8-1:0] rx_data_out;
+
+  // Instantiate the TX controller
+  reg send_trig;
+  reg [8-1:0] send_data;
+  wire tx_bsy;
 
   // Instantiate the RX fifo
   wire rx_fifo_we;
@@ -27,10 +35,85 @@ module io_protocol_controller
   assign rx_fifo_we = rx_data_valid;
   assign rx_fifo_in_data = rx_data_out;
 
-  // Instantiate the TX controller
-  reg send_trig;
-  reg [8-1:0] send_data;
-  wire tx_bsy;
+  // PC to board protocol
+  localparam [8-1:0] PROT_PC_B_REQ_INFO = 8'h0;
+  localparam [8-1:0] PROT_PC_B_RESET = 8'h1;
+  localparam [8-1:0] PROT_PC_B_SEND_CONFIG = 8'h2;
+  localparam [8-1:0] PROT_PC_B_START = 8'h3;
+  localparam [8-1:0] PROT_PC_B_SEND_DATA = 8'h4;
+
+  // Board to PC protocol
+  localparam [8-1:0] PROT_B_PC_SEND_INFO = 8'h0;
+  localparam [8-1:0] PROT_B_PC_RESETED = 8'h1;
+  localparam [8-1:0] PROT_B_PC_CONF_RECEIVED = 8'h2;
+  localparam [8-1:0] PROT_B_PC_STARTED = 8'h3;
+  localparam [8-1:0] PROT_B_PC_REQ_DATA = 8'h4;
+  localparam [8-1:0] PROT_B_PC_SEND_DATA = 8'h5;
+  localparam [8-1:0] PROT_B_PC_DONE_RD = 8'h6;
+  localparam [8-1:0] PROT_B_PC_DONE_WR = 8'h7;
+  localparam [8-1:0] PROT_B_PC_DONE_ACC = 8'h8;
+
+  // IO and protocol controller
+  reg [4-1:0] fsm_io;
+  localparam [4-1:0] FSM_IDLE = 4'h0;
+  localparam [4-1:0] FSM_DECODE_PROTOCOL = 4'h1;
+  localparam [4-1:0] FSM_SEND_INFO = 4'h2;
+  localparam [4-1:0] FSM_RESET = 4'h3;
+  localparam [4-1:0] FSM_SEND_CONFIG = 4'h4;
+  localparam [4-1:0] FSM_START_ACC = 4'h5;
+  localparam [4-1:0] FSM_MOVE_DATA_TO_ACC = 4'h6;
+
+  always @(posedge clk) begin
+    if(rst) begin
+      fsm_io <= FSM_IDLE;
+      rx_fifo_re <= 1'b0;
+    end else begin
+      rx_fifo_re <= 1'b0;
+      case(fsm_io)
+        FSM_IDLE: begin
+          if(~rx_fifo_empty) begin
+            rx_fifo_re <= 1'b1;
+          end 
+        end
+        FSM_DECODE_PROTOCOL: begin
+          if(rx_fifo_out_valid) begin
+            fsm_io <= rx_fifo_out_data;
+          end 
+        end
+        FSM_SEND_INFO: begin
+        end
+        FSM_RESET: begin
+        end
+        FSM_SEND_CONFIG: begin
+        end
+        FSM_START_ACC: begin
+        end
+        FSM_MOVE_DATA_TO_ACC: begin
+        end
+        default: begin
+        end
+      endcase
+    end
+  end
+
+
+  fifo
+  #(
+    .FIFO_WIDTH(8),
+    .FIFO_DEPTH_BITS(5)
+  )
+  rx_fifo
+  (
+    .clk(clk),
+    .rst(rst),
+    .we(rx_fifo_we),
+    .in_data(rx_fifo_in_data),
+    .re(rx_fifo_re),
+    .out_valid(rx_fifo_out_valid),
+    .out_data(rx_fifo_out_data),
+    .empty(rx_fifo_empty)
+  );
+
 
   uart_rx
   uart_rx
@@ -57,30 +140,111 @@ module io_protocol_controller
   );
 
 
-  fifo
-  #(
-    .FIFO_WIDTH(8),
-    .FIFO_DEPTH_BITS(7)
-  )
-  rx_fifo
-  (
-    .clk(clk),
-    .rst(rst),
-    .we(rx_fifo_we),
-    .in_data(rx_fifo_in_data),
-    .re(rx_fifo_re),
-    .out_valid(rx_fifo_out_valid),
-    .out_data(rx_fifo_out_data),
-    .empty(rx_fifo_empty)
-  );
-
-
   initial begin
     sw_rst = 0;
     start = 0;
-    rx_fifo_re = 0;
     send_trig = 0;
     send_data = 0;
+    rx_fifo_re = 0;
+    fsm_io = 0;
+  end
+
+
+endmodule
+
+
+
+module fifo #
+(
+  parameter FIFO_WIDTH = 8,
+  parameter FIFO_DEPTH_BITS = 2,
+  parameter FIFO_ALMOSTFULL_THRESHOLD = 2 ** FIFO_DEPTH_BITS - 2,
+  parameter FIFO_ALMOSTEMPTY_THRESHOLD = 2
+)
+(
+  input clk,
+  input rst,
+  input we,
+  input [FIFO_WIDTH-1:0] in_data,
+  input re,
+  output reg out_valid,
+  output reg [FIFO_WIDTH-1:0] out_data,
+  output reg empty,
+  output reg almostempty,
+  output reg full,
+  output reg almostfull,
+  output reg [FIFO_DEPTH_BITS+1-1:0] data_count
+);
+
+  reg [FIFO_DEPTH_BITS-1:0] read_pointer;
+  reg [FIFO_DEPTH_BITS-1:0] write_pointer;
+  reg [FIFO_WIDTH-1:0] mem [0:2**FIFO_DEPTH_BITS-1];
+
+  always @(posedge clk) begin
+    if(rst) begin
+      empty <= 1;
+      almostempty <= 1;
+      full <= 0;
+      almostfull <= 0;
+      read_pointer <= 0;
+      write_pointer <= 0;
+      data_count <= 0;
+    end else begin
+      case({ we, re })
+        3: begin
+          read_pointer <= read_pointer + 1;
+          write_pointer <= write_pointer + 1;
+        end
+        2: begin
+          if(~full) begin
+            write_pointer <= write_pointer + 1;
+            data_count <= data_count + 1;
+            empty <= 0;
+            if(data_count == FIFO_ALMOSTEMPTY_THRESHOLD - 1) begin
+              almostempty <= 0;
+            end 
+            if(data_count == 2 ** FIFO_DEPTH_BITS - 1) begin
+              full <= 1;
+            end 
+            if(data_count == FIFO_ALMOSTFULL_THRESHOLD - 1) begin
+              almostfull <= 1;
+            end 
+          end 
+        end
+        1: begin
+          if(~empty) begin
+            read_pointer <= read_pointer + 1;
+            data_count <= data_count - 1;
+            full <= 0;
+            if(data_count == FIFO_ALMOSTFULL_THRESHOLD) begin
+              almostfull <= 0;
+            end 
+            if(data_count == 1) begin
+              empty <= 1;
+            end 
+            if(data_count == FIFO_ALMOSTEMPTY_THRESHOLD) begin
+              almostempty <= 1;
+            end 
+          end 
+        end
+      endcase
+    end
+  end
+
+
+  always @(posedge clk) begin
+    if(rst) begin
+      out_valid <= 0;
+    end else begin
+      out_valid <= 0;
+      if(we == 1) begin
+        mem[write_pointer] <= in_data;
+      end 
+      if(re == 1) begin
+        out_data <= mem[read_pointer];
+        out_valid <= 1;
+      end 
+    end
   end
 
 
@@ -394,104 +558,6 @@ module uart_tx
     tx_bsy = 0;
     tx_cnt = 0;
     data2send = 0;
-  end
-
-
-endmodule
-
-
-
-module fifo #
-(
-  parameter FIFO_WIDTH = 8,
-  parameter FIFO_DEPTH_BITS = 2,
-  parameter FIFO_ALMOSTFULL_THRESHOLD = 2 ** FIFO_DEPTH_BITS - 2,
-  parameter FIFO_ALMOSTEMPTY_THRESHOLD = 2
-)
-(
-  input clk,
-  input rst,
-  input we,
-  input [FIFO_WIDTH-1:0] in_data,
-  input re,
-  output reg out_valid,
-  output reg [FIFO_WIDTH-1:0] out_data,
-  output reg empty,
-  output reg almostempty,
-  output reg full,
-  output reg almostfull,
-  output reg [FIFO_DEPTH_BITS+1-1:0] data_count
-);
-
-  reg [FIFO_DEPTH_BITS-1:0] read_pointer;
-  reg [FIFO_DEPTH_BITS-1:0] write_pointer;
-  reg [FIFO_WIDTH-1:0] mem [0:2**FIFO_DEPTH_BITS-1];
-
-  always @(posedge clk) begin
-    if(rst) begin
-      empty <= 1;
-      almostempty <= 1;
-      full <= 0;
-      almostfull <= 0;
-      read_pointer <= 0;
-      write_pointer <= 0;
-      data_count <= 0;
-    end else begin
-      case({ we, re })
-        3: begin
-          read_pointer <= read_pointer + 1;
-          write_pointer <= write_pointer + 1;
-        end
-        2: begin
-          if(~full) begin
-            write_pointer <= write_pointer + 1;
-            data_count <= data_count + 1;
-            empty <= 0;
-            if(data_count == FIFO_ALMOSTEMPTY_THRESHOLD - 1) begin
-              almostempty <= 0;
-            end 
-            if(data_count == 2 ** FIFO_DEPTH_BITS - 1) begin
-              full <= 1;
-            end 
-            if(data_count == FIFO_ALMOSTFULL_THRESHOLD - 1) begin
-              almostfull <= 1;
-            end 
-          end 
-        end
-        1: begin
-          if(~empty) begin
-            read_pointer <= read_pointer + 1;
-            data_count <= data_count - 1;
-            full <= 0;
-            if(data_count == FIFO_ALMOSTFULL_THRESHOLD) begin
-              almostfull <= 0;
-            end 
-            if(data_count == 1) begin
-              empty <= 1;
-            end 
-            if(data_count == FIFO_ALMOSTEMPTY_THRESHOLD) begin
-              almostempty <= 1;
-            end 
-          end 
-        end
-      endcase
-    end
-  end
-
-
-  always @(posedge clk) begin
-    if(rst) begin
-      out_valid <= 0;
-    end else begin
-      out_valid <= 0;
-      if(we == 1) begin
-        mem[write_pointer] <= in_data;
-      end 
-      if(re == 1) begin
-        out_data <= mem[read_pointer];
-        out_valid <= 1;
-      end 
-    end
   end
 
 

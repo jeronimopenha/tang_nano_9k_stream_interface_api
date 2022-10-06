@@ -10,17 +10,17 @@ class Components:
     def __init__(
             self,
             data_width: int = 8,
-            n_input_output: int = 1,
+            n_channel: int = 1,
             fifo_depth: int = 2
     ):
         self.data_width = data_width
-        self.n_input_output = n_input_output
+        self.n_channel = n_channel
         self.fifo_depth = fifo_depth
         self.cache = {}
 
     def create_fifo(self) -> Module:
         data_width = self.data_width
-        n_input_output = self.n_input_output
+        n_channel = self.n_channel
         fifo_depth = self.fifo_depth
 
         name = 'fifo'
@@ -422,7 +422,7 @@ endmodule
 
     def create_io_controller(self) -> Module:
         data_width = self.data_width
-        n_input_output = self.n_input_output
+        n_channel = self.n_channel
         fifo_depth = self.fifo_depth
 
         name = "io_protocol_controller"
@@ -436,11 +436,21 @@ endmodule
         sw_rst = m.OutputReg('sw_rst')
         start = m.OutputReg('start')
 
+        m.EmbeddedCode('// Interface info to send, n_channel')
+        INFO_TO_SEND = m.Localparam('INFO_TO_SEND', Int(n_channel,8,10), 8)
+
+        m.EmbeddedCode('')
         m.EmbeddedCode('// Instantiate the RX controller')
         rx_bsy = m.Wire('rx_bsy')
         rx_block_timeout = m.Wire('rx_block_timeout')
         rx_data_valid = m.Wire('rx_data_valid')
         rx_data_out = m.Wire('rx_data_out', 8)
+
+        m.EmbeddedCode('')
+        m.EmbeddedCode('// Instantiate the TX controller')
+        tx_send_trig = m.Reg('send_trig')
+        tx_send_data = m.Reg('send_data', 8)
+        tx_bsy = m.Wire('tx_bsy')
 
         m.EmbeddedCode('')
         m.EmbeddedCode('// Instantiate the RX fifo')
@@ -453,13 +463,108 @@ endmodule
         m.EmbeddedCode('// The Rx fifo is controlled by the uart_rx module')
         rx_fifo_we.assign(rx_data_valid)
         rx_fifo_in_data.assign(rx_data_out)
-        
 
         m.EmbeddedCode('')
-        m.EmbeddedCode('// Instantiate the TX controller')
-        tx_send_trig = m.Reg('send_trig')
-        tx_send_data = m.Reg('send_data', 8)
-        tx_bsy = m.Wire('tx_bsy')
+        m.EmbeddedCode('// PC to board protocol')
+        PROT_PC_B_REQ_INFO = m.Localparam(
+            'PROT_PC_B_REQ_INFO', Int(0, 8, 16), 8)
+        PROT_PC_B_RESET = m.Localparam('PROT_PC_B_RESET', Int(1, 8, 16), 8)
+        PROT_PC_B_SEND_CONFIG = m.Localparam(
+            'PROT_PC_B_SEND_CONFIG', Int(2, 8, 16), 8)
+        PROT_PC_B_START = m.Localparam('PROT_PC_B_START', Int(3, 8, 16), 8)
+        PROT_PC_B_SEND_DATA = m.Localparam(
+            'PROT_PC_B_SEND_DATA', Int(4, 8, 16), 8)
+
+        m.EmbeddedCode('')
+        m.EmbeddedCode('// Board to PC protocol')
+        PROT_B_PC_SEND_INFO = m.Localparam(
+            'PROT_B_PC_SEND_INFO', Int(0, 8, 16), 8)
+        PROT_B_PC_RESETED = m.Localparam('PROT_B_PC_RESETED', Int(1, 8, 16), 8)
+        PROT_B_PC_CONF_RECEIVED = m.Localparam(
+            'PROT_B_PC_CONF_RECEIVED', Int(2, 8, 16), 8)
+        PROT_B_PC_STARTED = m.Localparam('PROT_B_PC_STARTED', Int(3, 8, 16), 8)
+        PROT_B_PC_REQ_DATA = m.Localparam(
+            'PROT_B_PC_REQ_DATA', Int(4, 8, 16), 8)
+        PROT_B_PC_SEND_DATA = m.Localparam(
+            'PROT_B_PC_SEND_DATA', Int(5, 8, 16), 8)
+        PROT_B_PC_DONE_RD = m.Localparam('PROT_B_PC_DONE_RD', Int(6, 8, 16), 8)
+        PROT_B_PC_DONE_WR = m.Localparam('PROT_B_PC_DONE_WR', Int(7, 8, 16), 8)
+        PROT_B_PC_DONE_ACC = m.Localparam(
+            'PROT_B_PC_DONE_ACC', Int(8, 8, 16), 8)
+
+        m.EmbeddedCode('')
+        m.EmbeddedCode('// IO and protocol controller')
+        fsm_io = m.Reg('fsm_io', 4)
+        FSM_IDLE = m.Localparam('FSM_IDLE', Int(
+            0, fsm_io.width, 16), fsm_io.width)
+        FSM_DECODE_PROTOCOL = m.Localparam(
+            'FSM_DECODE_PROTOCOL', Int(1, fsm_io.width, 16), fsm_io.width)
+        FSM_SEND_INFO = m.Localparam(
+            'FSM_SEND_INFO', Int(2, fsm_io.width, 16), fsm_io.width)
+        FSM_RESET = m.Localparam('FSM_RESET', Int(
+            3, fsm_io.width, 16), fsm_io.width)
+        FSM_SEND_CONFIG = m.Localparam(
+            'FSM_SEND_CONFIG', Int(4, fsm_io.width, 16), fsm_io.width)
+        FSM_START_ACC = m.Localparam(
+            'FSM_START_ACC', Int(5, fsm_io.width, 16), fsm_io.width)
+        FSM_MOVE_DATA_TO_ACC = m.Localparam(
+            'FSM_MOVE_DATA_TO_ACC', Int(6, fsm_io.width, 16), fsm_io.width)
+
+        m.Always(Posedge(clk))(
+            If(rst)(
+                fsm_io(FSM_IDLE),
+                rx_fifo_re(Int(0, 1, 2))
+            ).Else(
+                rx_fifo_re(Int(0, 1, 2)),
+                Case(fsm_io)(
+                    When(FSM_IDLE)(
+                        If(~rx_fifo_empty)(
+                            rx_fifo_re(Int(1, 1, 2))
+                        )
+                    ),
+                    When(FSM_DECODE_PROTOCOL)(
+                        If(rx_fifo_out_valid)(
+                            fsm_io(rx_fifo_out_data)
+                        )
+                    ),
+                    When(FSM_SEND_INFO)(
+                        #TODO
+                    ),
+                    When(FSM_RESET)(
+                        #TODO
+                    ),
+                    When(FSM_SEND_CONFIG)(
+
+                    ),
+                    When(FSM_START_ACC)(
+
+                    ),
+                    When(FSM_MOVE_DATA_TO_ACC)(
+
+                    ),
+                    When()(
+
+                    ),
+                )
+            )
+        )
+
+        aux = self.create_fifo()
+        par = [
+            ('FIFO_WIDTH', 8),
+            ('FIFO_DEPTH_BITS', 5)
+        ]
+        con = [
+            ('clk', clk),
+            ('rst', rst),
+            ('we', rx_fifo_we),
+            ('in_data', rx_fifo_in_data),
+            ('re', rx_fifo_re),
+            ('out_valid', rx_fifo_out_valid),
+            ('out_data', rx_fifo_out_data),
+            ('empty', rx_fifo_empty)
+        ]
+        m.Instance(aux, 'rx_%s' % aux.name, par, con)
 
         aux = self.create_uart_rx()
         par = []
@@ -485,23 +590,6 @@ endmodule
             ('tx_bsy', tx_bsy),
         ]
         m.Instance(aux, aux.name, par, con)
-
-        aux = self.create_fifo()
-        par = [
-            ('FIFO_WIDTH', 8),
-            ('FIFO_DEPTH_BITS', 7)
-        ]
-        con = [
-            ('clk', clk),
-            ('rst', rst),
-            ('we', rx_fifo_we),
-            ('in_data', rx_fifo_in_data),
-            ('re', rx_fifo_re),
-            ('out_valid', rx_fifo_out_valid),
-            ('out_data', rx_fifo_out_data),
-            ('empty', rx_fifo_empty)
-        ]
-        m.Instance(aux, 'rx_%s' % aux.name, par, con)
 
         _u.initialize_regs(m, {'tx': 1})
         return m

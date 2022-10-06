@@ -13,7 +13,7 @@ PC->board
 0x08    done acc received 8b
 
 board->pc
-0x00    send info 8b + 8b (nInput) + 8b(n_output) = 24b
+0x00    send info 8b + 8b (nChannel) = 16b
 0x01    reseted 8b
 0x02    config received 8b
 0x03    started 8b
