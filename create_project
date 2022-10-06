@@ -10,7 +10,7 @@ from veriloggen import *
 from math import ceil
 
 
-def write_file(name, string):
+def write_file(name: str, string: str):
     with open(name, 'w') as fp:
         fp.write(string)
         fp.close()
@@ -19,15 +19,21 @@ def write_file(name, string):
 def create_args():
     parser = argparse.ArgumentParser('create_project -h')
     parser.add_argument(
-        '-i', '--I/O', help='Number of interface I/Os', type=int, default=1)
+        '-i', '--i_o_number', help='Number of interface I/Os', type=int, default=1)
+    parser.add_argument(
+        '-f', '--io_fifo_depth', help='Depth bits for each I/O FIFOs', type=int, default=2)
+    parser.add_argument(
+        '-w', '--data_width', help='Acc word width in bis. Max = 64b', type=int, default=8)
     parser.add_argument(
         '-o', '--output', help='Project output folter location', type=str, default='.')
+
     return parser.parse_args()
 
 
 # TODO
-def create_project(sa_root, dot_file, copies, name, output_path):
+def create_project(interface_root: str, output_path: str, data_width: int, i_o_number: int, fifo_depth:int):
     pass
+
     '''sa_graph = _u.SaGraph(dot_file)
     # sa_graph.n_cells = 144
     # sa_graph.n_cells_sqrt = 12
@@ -73,9 +79,13 @@ def main():
 
     if args.output == '.':
         args.output = running_path
+    if args.data_width > 64:
+        raise TypeError("The Acc data width cannot be greater than 64b.")
+    if args.io_fifo_depth < 0:
+        raise TypeError("The I/O FIFOs depth cannot be less than 1.")
 
-    create_project(interface_root, args.dot,
-                   args.copies, args.name, args.output)
+    create_project(interface_root, args.output,
+                   args.data_width, args.i_o_number, args.io_fifo_depth)
     print('Project successfully created in %s/' % (args.output))
 
 

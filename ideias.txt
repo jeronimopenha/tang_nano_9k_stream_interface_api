@@ -1,12 +1,12 @@
 Base word of 64b for data transf
-Max data transfer width = 4MB
+Max data transfer width = 16MB
 
 PC->board
 0x00    request info 8b
 0x01    reset 8b
-0x02    send config - 8b + meta(8b) + 22b = 38b
+0x02    send config - 8b + meta(8b) + 24b + 24b = 64b 
 0x03    start 8b
-0x04    send data - 8b + meta(8b) + 64b = 72b
+0x04    send data - 8b + meta(8b) + 64b = 80b
 0x05    data received 8b
 0x06    done rd received 8b
 0x07    done wr received 8b
@@ -18,7 +18,7 @@ board->pc
 0x02    config received 8b
 0x03    started 8b
 0x04    request data 8b + meta(8b) = 16b
-0x05    send data - 8b + meta(8b) + 64b = 72b
+0x05    send data - 8b + meta(8b) + 64b = 80b
 0x06    done rd 8b + meta(8b)
 0x07    dore wr 8b + meta(8b)
 0x08    done acc 8b + meta(8b)
