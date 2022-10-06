@@ -67,26 +67,48 @@ module io_protocol_controller
     if(rst) begin
       fsm_io <= FSM_IDLE;
       rx_fifo_re <= 1'b0;
+      sw_rst <= 0;
     end else begin
       rx_fifo_re <= 1'b0;
       case(fsm_io)
         FSM_IDLE: begin
           if(~rx_fifo_empty) begin
             rx_fifo_re <= 1'b1;
+            fsm_io <= FSM_DECODE_PROTOCOL;
           end 
         end
         FSM_DECODE_PROTOCOL: begin
           if(rx_fifo_out_valid) begin
-            fsm_io <= rx_fifo_out_data;
+            case(rx_fifo_out_data)
+              PROT_PC_B_REQ_INFO: begin
+                fsm_io <= FSM_IDLE;
+              end
+              PROT_PC_B_RESET: begin
+                fsm_io <= FSM_RESET;
+              end
+              PROT_PC_B_SEND_CONFIG: begin
+                fsm_io <= FSM_IDLE;
+              end
+              PROT_PC_B_START: begin
+                fsm_io <= FSM_START_ACC;
+              end
+              PROT_PC_B_SEND_DATA: begin
+                fsm_io <= FSM_IDLE;
+              end
+            endcase
           end 
         end
         FSM_SEND_INFO: begin
         end
         FSM_RESET: begin
+          sw_rst <= ~sw_rst;
+          fsm_io <= FSM_IDLE;
         end
         FSM_SEND_CONFIG: begin
         end
         FSM_START_ACC: begin
+          start <= ~start;
+          fsm_io <= FSM_IDLE;
         end
         FSM_MOVE_DATA_TO_ACC: begin
         end

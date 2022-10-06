@@ -10,11 +10,11 @@ class Interface:
     def __init__(
             self,
             data_width: int = 8,
-            n_input_output: int = 1,
+            n_channel: int = 1,
             fifo_depth: int = 2
     ):
         self.data_width = data_width
-        self.n_input_output = n_input_output
+        self.n_channel = n_channel
         self.fifo_depth = fifo_depth
 
     def get(self):
@@ -58,12 +58,12 @@ class Interface:
 
     def __create_interface(self) -> Module:
         data_width = self.data_width
-        n_input_output = self.n_input_output
+        n_channel = self.n_channel
         fifo_depth = self.fifo_depth
-        comp = Components(data_width, n_input_output,  fifo_depth)
+        comp = Components(data_width, n_channel,  fifo_depth)
 
         m = Module(
-            "tang_nano_9k_uart_interface_%dfifo_depth_%dIO_%dacc_data_width")
+            "tang_nano_9k_uart_interface_%dIO"%n_channel)
         clk = m.Input('clk_27mhz')
         btn_rst = m.Input('button_s1')
         uart_rx = m.Input('uart_rx')
@@ -104,10 +104,19 @@ class Interface:
         led[5].assign(~start)
 
         m.EmbeddedCode('')
-        m.EmbeddedCode('// Input data protocol controller')
+        m.EmbeddedCode('// I/O data protocol controller')
 
-        m.EmbeddedCode('')
-        m.EmbeddedCode('// Input data protocol controller')
+        aux = comp.create_io_controller()
+        par = []
+        con = [
+            ('clk', clk),
+            ('rst', ~btn_rst),
+            ('rx', uart_rx),
+            ('tx', uart_tx),
+            ('sw_rst', sw_rst),
+            ('start', start),
+        ]
+        m.Instance(aux,aux.name,par,con)
 
         _u.initialize_regs(m)
         return m
@@ -115,4 +124,5 @@ class Interface:
 
 interface = Interface()
 _int = interface.get()
-_int.to_verilog("./"+_int.name + ".v")
+_int.to_verilog("/home/jeronimo/Documents/tang_projects/fpga_project/src/top_rxtx.v")
+#_int.to_verilog("./"+_int.name + ".v")

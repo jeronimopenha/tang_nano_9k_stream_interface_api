@@ -1,0 +1,9 @@
+from pyftdi.ftdi import Ftdi
+import pyftdi.serialext
+import time,random
+
+port = pyftdi.serialext.serial_for_url('ftdi://ftdi:2232:1/2', baudrate=3000000, bytesize=8, parity='N', stopbits=1, timeout=0.001)
+port.flush()
+time.sleep(0.0005)
+#for i in range(10000):
+port.write(chr(3))

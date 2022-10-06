@@ -437,7 +437,7 @@ endmodule
         start = m.OutputReg('start')
 
         m.EmbeddedCode('// Interface info to send, n_channel')
-        INFO_TO_SEND = m.Localparam('INFO_TO_SEND', Int(n_channel,8,10), 8)
+        INFO_TO_SEND = m.Localparam('INFO_TO_SEND', Int(n_channel, 8, 10), 8)
 
         m.EmbeddedCode('')
         m.EmbeddedCode('// Instantiate the RX controller')
@@ -513,31 +513,51 @@ endmodule
         m.Always(Posedge(clk))(
             If(rst)(
                 fsm_io(FSM_IDLE),
-                rx_fifo_re(Int(0, 1, 2))
+                rx_fifo_re(Int(0, 1, 2)),
+                sw_rst(0),
             ).Else(
                 rx_fifo_re(Int(0, 1, 2)),
                 Case(fsm_io)(
                     When(FSM_IDLE)(
                         If(~rx_fifo_empty)(
-                            rx_fifo_re(Int(1, 1, 2))
+                            rx_fifo_re(Int(1, 1, 2)),
+                            fsm_io(FSM_DECODE_PROTOCOL)
                         )
                     ),
                     When(FSM_DECODE_PROTOCOL)(
                         If(rx_fifo_out_valid)(
-                            fsm_io(rx_fifo_out_data)
+                            Case(rx_fifo_out_data)(
+                                When(PROT_PC_B_REQ_INFO)(
+                                    fsm_io(FSM_IDLE)
+                                ),
+                                When(PROT_PC_B_RESET)(
+                                    fsm_io(FSM_RESET)
+                                ),
+                                When(PROT_PC_B_SEND_CONFIG)(
+                                    fsm_io(FSM_IDLE)
+                                ),
+                                When(PROT_PC_B_START)(
+                                    fsm_io(FSM_START_ACC)
+                                ),
+                                When(PROT_PC_B_SEND_DATA)(
+                                    fsm_io(FSM_IDLE)
+                                ),
+                            ),
                         )
                     ),
                     When(FSM_SEND_INFO)(
-                        #TODO
+                        # TODO
                     ),
                     When(FSM_RESET)(
-                        #TODO
+                        sw_rst(~sw_rst),
+                        fsm_io(FSM_IDLE)
                     ),
                     When(FSM_SEND_CONFIG)(
 
                     ),
                     When(FSM_START_ACC)(
-
+                        start(~start),
+                        fsm_io(FSM_IDLE)
                     ),
                     When(FSM_MOVE_DATA_TO_ACC)(
 
