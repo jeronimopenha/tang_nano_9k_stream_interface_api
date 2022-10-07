@@ -54,6 +54,7 @@ module io_protocol_controller
   localparam [8-1:0] PROT_B_PC_DONE_ACC = 8'h8;
 
   // IO and protocol controller
+  reg [8-1:0] fsm_io_send_data;
   reg [4-1:0] fsm_io;
   localparam [4-1:0] FSM_IDLE = 4'h0;
   localparam [4-1:0] FSM_DECODE_PROTOCOL = 4'h1;
@@ -68,8 +69,12 @@ module io_protocol_controller
       fsm_io <= FSM_IDLE;
       rx_fifo_re <= 1'b0;
       sw_rst <= 0;
+      send_trig <= 0;
+      start <= 0;
     end else begin
       rx_fifo_re <= 1'b0;
+      sw_rst <= 0;
+      send_trig <= 0;
       case(fsm_io)
         FSM_IDLE: begin
           if(~rx_fifo_empty) begin
@@ -101,18 +106,24 @@ module io_protocol_controller
         FSM_SEND_INFO: begin
         end
         FSM_RESET: begin
-          sw_rst <= ~sw_rst;
-          fsm_io <= FSM_IDLE;
+          if(~tx_bsy) begin
+            send_trig <= 1;
+            send_data <= PROT_B_PC_RESETED;
+            sw_rst <= ~sw_rst;
+            fsm_io <= FSM_IDLE;
+          end 
         end
         FSM_SEND_CONFIG: begin
         end
         FSM_START_ACC: begin
-          start <= ~start;
-          fsm_io <= FSM_IDLE;
+          if(~tx_bsy) begin
+            send_trig <= 1;
+            send_data <= PROT_B_PC_STARTED;
+            start <= ~start;
+            fsm_io <= FSM_IDLE;
+          end 
         end
         FSM_MOVE_DATA_TO_ACC: begin
-        end
-        default: begin
         end
       endcase
     end
@@ -168,6 +179,7 @@ module io_protocol_controller
     send_trig = 0;
     send_data = 0;
     rx_fifo_re = 0;
+    fsm_io_send_data = 0;
     fsm_io = 0;
   end
 

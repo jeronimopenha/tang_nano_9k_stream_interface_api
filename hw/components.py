@@ -494,19 +494,22 @@ endmodule
 
         m.EmbeddedCode('')
         m.EmbeddedCode('// IO and protocol controller')
+        fsm_io_send_data = m.Reg('fsm_io_send_data', 8)
         fsm_io = m.Reg('fsm_io', 4)
-        FSM_IDLE = m.Localparam('FSM_IDLE', Int(
-            0, fsm_io.width, 16), fsm_io.width)
+        FSM_IDLE = m.Localparam(
+            'FSM_IDLE', Int(0, fsm_io.width, 16), fsm_io.width)
         FSM_DECODE_PROTOCOL = m.Localparam(
             'FSM_DECODE_PROTOCOL', Int(1, fsm_io.width, 16), fsm_io.width)
         FSM_SEND_INFO = m.Localparam(
             'FSM_SEND_INFO', Int(2, fsm_io.width, 16), fsm_io.width)
-        FSM_RESET = m.Localparam('FSM_RESET', Int(
-            3, fsm_io.width, 16), fsm_io.width)
+        FSM_RESET = m.Localparam(
+            'FSM_RESET', Int(3, fsm_io.width, 16), fsm_io.width)
         FSM_SEND_CONFIG = m.Localparam(
             'FSM_SEND_CONFIG', Int(4, fsm_io.width, 16), fsm_io.width)
         FSM_START_ACC = m.Localparam(
             'FSM_START_ACC', Int(5, fsm_io.width, 16), fsm_io.width)
+        # FSM_START_ACK = m.Localparam(
+        #    'FSM_START_ACK', Int(6, fsm_io.width, 16), fsm_io.width)
         FSM_MOVE_DATA_TO_ACC = m.Localparam(
             'FSM_MOVE_DATA_TO_ACC', Int(6, fsm_io.width, 16), fsm_io.width)
 
@@ -515,8 +518,12 @@ endmodule
                 fsm_io(FSM_IDLE),
                 rx_fifo_re(Int(0, 1, 2)),
                 sw_rst(0),
+                tx_send_trig(0),
+                start(0),
             ).Else(
                 rx_fifo_re(Int(0, 1, 2)),
+                sw_rst(0),
+                tx_send_trig(0),
                 Case(fsm_io)(
                     When(FSM_IDLE)(
                         If(~rx_fifo_empty)(
@@ -549,20 +556,26 @@ endmodule
                         # TODO
                     ),
                     When(FSM_RESET)(
-                        sw_rst(~sw_rst),
-                        fsm_io(FSM_IDLE)
+                        If(~tx_bsy)(
+                            tx_send_trig(1),
+                            tx_send_data(PROT_B_PC_RESETED),
+                            sw_rst(~sw_rst),
+                            fsm_io(FSM_IDLE)
+                        )
                     ),
                     When(FSM_SEND_CONFIG)(
 
                     ),
                     When(FSM_START_ACC)(
-                        start(~start),
-                        fsm_io(FSM_IDLE)
+                        If(~tx_bsy)(
+                            tx_send_trig(1),
+                            tx_send_data(PROT_B_PC_STARTED),
+                            start(~start),
+                            fsm_io(FSM_IDLE)
+                        ),
                     ),
-                    When(FSM_MOVE_DATA_TO_ACC)(
 
-                    ),
-                    When()(
+                    When(FSM_MOVE_DATA_TO_ACC)(
 
                     ),
                 )
